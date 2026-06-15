@@ -140,4 +140,4 @@ FOOTNOTES
   - =AMD=: (Amendment) may show any revisions to the standard.
   - =Trapped=: Must be False for PDF/UA-1 compliance.
   - =Title=: A document title is mandatory for PDF/UA-1; if this is empty, it fails compliance. 
-  (The fact that exiftool -Part returned 1 confirms a file has the PDF/UA-1 identifier embedded only means the file claims to be compliant. A structural validator like [[https://pdfa.org/product/pac/][PAC 2024]] is still needed to ensure the tags and reading order are actually correct, and even that doesn't guarantee the document is fully implements everything that is suggested for accessibility.)
+  (The fact that =exiftool -Part= returned ~1~ confirms a file has the PDF/UA-1 identifier embedded only means the file claims to be compliant. A structural validator like [[https://pdfa.org/product/pac/][PAC 2024]] is still needed to ensure the tags and reading order are actually correct, and even that doesn't guarantee the document is fully implements everything that is suggested for accessibility.)
