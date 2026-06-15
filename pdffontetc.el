@@ -300,14 +300,15 @@ otherwise queries for a PDF file.  The optional argument \='COMBINED\=' is
 used when combined with `pdffontetc-display-font-information'."
   (interactive (list (pdffontetc--resolve-pdf-buffer nil) nil))
   (let* ((target-doc (pdffontetc--resolve-pdf-buffer doc))
-         (buf-name (if combined "*PDF metadata and font info*" "*PDF metadata*"))
+         (buf-name (if combined "*PDF metadata and font info* from =epdfinfo= server" "*PDF metadata*"))
          (sections
           (list
-           (list :title (format "PDF metadata for file \"=%s=\":" (file-name-nondirectory target-doc))
+           (list :title (format "Extended PDF metadata from =exiftools=~:"
+                                (file-name-nondirectory target-doc))
                  :type 'list
                  :content (pdffontetc--extract-metadata target-doc))
            ;; Explicitly set :type to 'grouped-list
-           (list :title "Accessibility & Archivable Conformity Status (ExifTool Groups):"
+           (list :title "PDF metadata for file \"=%s=\" from exiftools:"
                  :type 'grouped-list
                  :content (pdffontetc--extract-exiftool-accessibility target-doc)))))
     (pdffontetc--render-org-buffer buf-name sections combined)))
@@ -351,13 +352,14 @@ triggers showing explanatory information for font metadata.\)"
          (master-sections
           (list
            ;; 1. Poppler metadata
-           (list :title (format "PDF metadata for file \"=%s=\":" (file-name-nondirectory target-doc))
+           (list :title (format "PDF metadata for file \"=%s=\" from =epdfinfo= server:"
+                                (file-name-nondirectory target-doc))
                  :type 'list
                  :content (pdffontetc--extract-metadata target-doc))
            
            ;; 2. Exif metadata
            ;; (explicitly set :type to 'grouped-list)
-           (list :title "Accessibility & Archivable Conformity Status (ExifTool Groups):"
+           (list :title "Extended PDF metadata from =exiftools=:"
                  :type 'grouped-list
                  :content (pdffontetc--extract-exiftool-accessibility target-doc))
            
