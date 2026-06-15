@@ -272,7 +272,7 @@ Returns an alist grouped by ExifTool family bracket keys:
    (\"[PDF]\" . ((\"PDFVersion\" . \"1.7\"))))"
   (if (not (executable-find "exiftool"))
       '(("Error" . (("Status" . "exiftool is not installed"))))
-    (let* ((flags "-G1 -a -s -XMP:all -PDF:all")
+    (let* ((flags "-G1 -a -s -u") ;; show *all* PDF info
            (cmd (format "exiftool %s %s 2>/dev/null" flags (shell-quote-argument doc)))
            (raw-lines (split-string (shell-command-to-string cmd) "\n" t))
            (groups nil))
