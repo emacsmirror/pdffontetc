@@ -122,6 +122,7 @@ With [[https://github.com/quelpa/quelpa][quelpa]]:
 * Related Packages
 - [[https://github.com/vedang/pdf-tools][PDF Tools]] (obviously): viewing PDFs in Emacs
 - [[https://github.com/krisbalintona/pdf-meta-edit][pdf-meta-edit]]: editing PDF metadata, labels, & bookmarks in Emacs
+- [[https://codeberg.org/MonadicSheep/emacs-reader][emacs-reader]]: aims to support a full range of "document"  formats, including not only PDF, but also esp. EPUB, MOBI, FB2, XPS/OpenXPS, CBZ (with lower priority support for Liberoffice-type Open Document Formats - ODT, ODS, ODP, ODG); focussing on taking advantage of dynamic (native) modules of Emacs, and ultimately [[https://github.com/minad/emacs-canvas-patch][upcoming patches to Emacs' canvas rendering]] and drawing on [[https://codeberg.org/MonadicSheep/pale][PALE]] (a Picture and Animation Library for Emacs, which attempts to implement real-time graphics in Emacs [see the [[https://github.com/minad/doom-on-emacs][Doom on Emacs demo]]]) 
 
 #+begin_comment
 FOOTNOTES
