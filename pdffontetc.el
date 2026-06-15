@@ -175,8 +175,10 @@ used when combined with `pdffontetc-display-font-information'."
                     ;; otherwise, if it's an empty string at the end of all this
                     (insert "\n")  ;; leave value blank
                     )))))))
-      (when ; compiler pacifier
-          (fboundp 'org-fold-show-all)
+      (when (and ; compiler pacifier
+             (fboundp 'org-fold-show-all)
+             (fboundp 'org-mode))
+        (org-mode)
         (org-fold-show-all))
       (read-only-mode 1)
       (when (null combined)
