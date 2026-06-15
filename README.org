@@ -19,6 +19,8 @@ Three basic commands:
 ** Remarks, Requirements
 Requires the =pdffonts= utility from [[https://poppler.freedesktop.org/][Poppler]], which is the same PDF toolsuite that the Emacs [[https://github.com/vedang/pdf-tools][PDF Tools package]] uses. And you ideally are also using the PDF Tools package.
 
+Now, initial experimental support has also been added showing information from [[https://exiftool.org][exiftool]], which can access additional potentially important additional PDF information, like PDF/UA.[fn:1]
+
 The metadata command is more or less functionally equivalent with the one already in PDF Tools (in ~pdf-misc.el~), but displays using Org-mode styling.
 
 The PDF Tools metadata functionality has been around for a while, and I often use it. I was frustrated because I wanted to be able to see information about fonts as well, and would always have to drop out to a terminal to get this information. Now I don't have to anymore.
@@ -131,3 +133,10 @@ FOOTNOTES
 
 * Notes
 [fn:0] For the ~creator~ field, see the nascent [[https://github.com/emacs-bigtop/sysinfo-environs/][Emacs System Information and Environs]] package, under the [[https://github.com/emacs-bigtop/sysinfo-environs/#use-2-encode-system-details]["encoding system details" section]].
+[fn:1] E.g, for looking if a document is at least formally PDF/UA-1 compliant, check:
+  - =Part=: Should be =1= (indicating PDF/UA-1).
+  - =PDFUAVersion=: Often shows the specific version of the standard.
+  - =AMD=: (Amendment) may show any revisions to the standard.
+  - =Trapped=: Must be False for PDF/UA-1 compliance.
+  - =Title=: A document title is mandatory for PDF/UA-1; if this is empty, it fails compliance. 
+  (The fact that exiftool -Part returned 1 confirms a file has the PDF/UA-1 identifier embedded only means the file claims to be compliant. A structural validator like [[https://pdfa.org/product/pac/][PAC 2024]] is still needed to ensure the tags and reading order are actually correct, and even that doesn't guarantee the document is fully implements everything that is suggested for accessibility.)

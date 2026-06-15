@@ -139,19 +139,24 @@ returned list are in the same order as in TREE.
 ;;;; Core Render Engine
 
 (defun pdffontetc--render-org-buffer (buffer-name sections &optional combined)
-  "Generic engine to display SECTIONS in an Org-mode temp buffer.
+  "Generic engine to display \='SECTIONS\=' in an Org-mode temp buffer \='buffer-name\='.
+Supports structural grouping overrides via nested lists under :type 'grouped-list'
 SECTIONS is a list of plists containing:
-  (:title String :type (list | table | raw) :content Data :headers ListOfStrings)"
+  (:title String :type (list | table | grouped-list | raw) :content Data :headers ListOfStrings)
+The optional argument \='COMBINED\=' is
+used when combined with `pdffontetc-display-font-information'."
   (let ((buf (get-buffer-create buffer-name)))
     (with-current-buffer buf
       (read-only-mode -1)
       (unless combined (erase-buffer))
+      
+      ;; org-mode initialization 
+      (when (fboundp 'org-mode) (org-mode))
+      
       (when (and combined (> (buffer-size) 0))
         (goto-char (point-max))
         (insert "\n\n"))
-
-      (when (fboundp 'org-mode) (org-mode)) ;; turn on org-mode now
-       
+      
       (dolist (section sections)
         (when section
           (let ((title (plist-get section :title))
@@ -159,10 +164,24 @@ SECTIONS is a list of plists containing:
                 (content (plist-get section :content))
                 (headers (plist-get section :headers)))
             
+            ;; Render Section Main Header
             (when title (insert "* " title "\n"))
             
             (cond
-             ;; Rendering Org Lists with Markup
+             ;; EXIFTOOL GROUPS: format as subheadings ("** ...")
+             ((eq type 'grouped-list)
+              (dolist (group content)
+                (let ((group-heading (car group))
+                      (items (cdr group)))
+                  ;; prints, e.g.,  "** [XMP-pdf]" cleanly
+                  (insert (format "** %s\n" group-heading))
+                  (dolist (item items)
+                    ;; prints, e.g., "- =PDFVersion=: ~1.7~" cleanly
+                    (insert (format "- =%s=: ~%s~\n" (car item) (cdr item))))
+                  ;; (insert "\n") ;; don't break
+                  ))) 
+
+             ;; STANDARD METADATA LISTS
              ((eq type 'list)
               (dolist (item content)
                 (let ((key (car item)) (val (cdr item)))
@@ -170,43 +189,38 @@ SECTIONS is a list of plists containing:
                   (cond
                    ((null val) (insert "\n"))
                    ((and (listp val) (eq key 'keywords))
-                    (insert (mapconcat
-                             (lambda (k) (format "~%s~" (string-trim k))) val ", ")
-                            "\n"))
-                   (t (let ((v (if (listp val)
-                                   (car val)
-                                 val)))
+                    (insert (mapconcat (lambda (k) (format "~%s~" (string-trim k))) val ", ") "\n"))
+                   (t (let ((v (if (listp val) (car val) val)))
                         (if (and (stringp v) (not (string-empty-p v)))
                             (insert (format "~%s~\n" (string-trim v)))
                           (insert "\n"))))))))
              
-             ;; Rendering Org Tables
+             ;; FONT TABLES
              ((eq type 'table)
-              (when headers
-                (insert "|" (mapconcat #'identity headers "|") "|\n")
-                (insert "|-\n"))
-              (dolist (row content)
-                (insert "|" (mapconcat (lambda (x) (format "%s" (or x ""))) row "|") "|\n"))
-              (when (fboundp 'org-table-align)
-                (org-table-align) ;; double-tap to get to align properly
-                (org-table-align)))
+              (let ((table-start (point)))
+                (when headers
+                  (insert "|" (mapconcat #'identity headers "|") "|\n")
+                  (insert "|-\n"))
+                (dolist (row content)
+                  (insert "|" (mapconcat (lambda (x) (format "%s" (or x ""))) row "|") "|\n"))
+                ;; Isolated aligner that works inside org-mode without searching outside the table
+                (when (fboundp 'org-table-align)
+                  (save-excursion
+                    (goto-char table-start)
+                    (org-table-align) (org-table-align))))) ;; double-tap
              
-             ;; Rendering Raw Explanations/Markdown blocks
+             ;; process "raw" text
              ((eq type 'raw)
               (insert content)))
             (insert "\n"))))
       
-      ;; Make sure everything's unfolded
-      ;; (when (fboundp 'org-mode)
-      ;;   (org-mode)
-      ;;   (org-mode))
-      (when (fboundp 'org-fold-show-all)
-        (org-fold-show-all)
-        (org-fold-show-all))
+      ;; unfold all org sections from start
+      (when (fboundp 'org-fold-show-all) (org-fold-show-all))
       (read-only-mode 1)
       (unless combined
         (switch-to-buffer-other-window buf))
       (goto-char (point-min)))))
+
 
 ;;;; Backend Data Parsers for PDF Font information
 
@@ -235,7 +249,7 @@ Extracts information from calling `pdffonts' utility on PDF document
                  (gen-id (nth (- len 1) tokens))
                  (num-id (nth (- len 2) tokens))
                  (object-id (concat num-id "." gen-id))
-                 ;; Read columns backwards from object ID position
+                 ;; read columns backwards from object ID position
                  (uni (nth (- len 3) tokens))
                  (sub (nth (- len 4) tokens))
                  (emb (nth (- len 5) tokens))
@@ -250,31 +264,35 @@ Extracts information from calling `pdffonts' utility on PDF document
             (push (list font-name type encoding emb sub uni object-id) results)))))
     (nreverse results)))
 
-
 (defun pdffontetc--extract-exiftool-accessibility (doc)
   "Extract specific accessibility and validation features from \='DOC\=' using ExifTool.
-Silences underlying environment localization shell errors safely."
+Silences underlying environment localization shell errors safely.
+Returns an alist grouped by ExifTool family bracket keys:
+  ((\"[XMP-dc]\" . ((\"Title\" . \"Syllabus...\") (\"Creator\" . \"No Mann\")))
+   (\"[PDF]\" . ((\"PDFVersion\" . \"1.7\"))))"
   (if (not (executable-find "exiftool"))
-      '(("Error" . "exiftool is not installed on this system"))
-    (let* (;; Call exiftool without filtering tags to capture everything
-           (cmd (format "exiftool %s 2>/dev/null" (shell-quote-argument doc)))
+      '(("Error" . (("Status" . "exiftool is not installed"))))
+    (let* ((flags "-G1 -a -s -XMP:all -PDF:all")
+           (cmd (format "exiftool %s %s 2>/dev/null" flags (shell-quote-argument doc)))
            (raw-lines (split-string (shell-command-to-string cmd) "\n" t))
-           (results nil))
+           (groups nil))
       (dolist (line raw-lines)
-        (when (string-match ":" line)
-          (let* ((pos (string-match ":" line))
-                 (key (string-trim (substring line 0 pos)))
-                 (val (string-trim (substring line (1+ pos)))))
-            ;; Only include the tag if it has an actual value assigned to it
-            (unless (string-empty-p val)
-              (push (cons key val) results)))))
-      (nreverse results))))
+        ;; regex matches exactly: "[Group]   Key   : Value" regardless of spacing sizes
+        (when (string-match "^\\(\\[[^]]+\\]\\)\\s-+\\([^:]+?\\)\\s-*:\\s-\\(.*\\)$" line)
+          (let* ((group-name (match-string 1 line))
+                 (tag-key (match-string 2 line))
+                 (tag-val (match-string 3 line)))
+            (unless (string-empty-p tag-val)
+              (let* ((existing-group (assoc group-name groups)))
+                (if existing-group
+                    (setcdr existing-group (append (cdr existing-group) (list (cons tag-key tag-val))))
+                  (push (list group-name (cons tag-key tag-val)) groups)))))))
+      (nreverse groups))))
 
 
 ;;;; Interactive User Operations
 
 ;;;###autoload
-;; was "  "Display standard PDF Metadata + Exif Validation Tags.""
 (defun pdffontetc-display-metadata-org-style (&optional doc combined)
   "Display PDF metadata in a separate buffer in Org-mode style.
 Argument \='DOC\=' defaults to current buffer if it contains a PDF file;
@@ -288,11 +306,12 @@ used when combined with `pdffontetc-display-font-information'."
            (list :title (format "PDF metadata for file \"=%s=\":" (file-name-nondirectory target-doc))
                  :type 'list
                  :content (pdffontetc--extract-metadata target-doc))
-           (list :title "Accessibility & Archivable Conformity Status (ExifTool):"
-                 :type 'list
-                 :content (pdffontetc--extract-exiftool-accessibility target-doc))
-           )))
+           ;; Explicitly set :type to 'grouped-list
+           (list :title "Accessibility & Archivable Conformity Status (ExifTool Groups):"
+                 :type 'grouped-list
+                 :content (pdffontetc--extract-exiftool-accessibility target-doc)))))
     (pdffontetc--render-org-buffer buf-name sections combined)))
+
 
 ;;;###autoload
 (defun pdffontetc-display-font-information (&optional doc combined prefix-arg)
@@ -331,26 +350,32 @@ triggers showing explanatory information for font metadata.\)"
          (buf-name "*PDF metadata and font info*")
          (master-sections
           (list
+           ;; 1. Poppler metadata
            (list :title (format "PDF metadata for file \"=%s=\":" (file-name-nondirectory target-doc))
                  :type 'list
                  :content (pdffontetc--extract-metadata target-doc))
            
-           (list :title "Accessibility & Archivable Conformity Status (ExifTool):"
-                 :type 'list
+           ;; 2. Exif metadata
+           ;; (explicitly set :type to 'grouped-list)
+           (list :title "Accessibility & Archivable Conformity Status (ExifTool Groups):"
+                 :type 'grouped-list
                  :content (pdffontetc--extract-exiftool-accessibility target-doc))
            
+           ;; 3. pdffontinfo 
            (list :title "PDF Font Information:"
                  :type 'table
                  :headers '("=name=" "=type=" "=encoding=" "=emb=" "=sub=" "=uni=" "=object ID=")
                  :content (pdffontetc--extract-pdffonts-info target-doc)))))
     
+    ;; add check for prefix for whether to show help block additions onto the pipeline stack
     (when prefix-arg
       (setq master-sections 
             (append master-sections 
                     (list (list :type 'raw :content pdffontetc-pdffonts-man-help)))))
     
-    ;; Render everything completely using a fresh canvas generation pass
+    ;; render everything atomically into the exact same target canvas
     (pdffontetc--render-org-buffer buf-name master-sections nil)))
+
 
 
 (provide 'pdffontetc)
