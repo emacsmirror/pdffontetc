@@ -133,6 +133,7 @@ FOOTNOTES
 
 * Notes
 [fn:0] For the ~creator~ field, see the nascent [[https://github.com/emacs-bigtop/sysinfo-environs/][Emacs System Information and Environs]] package, under the [[https://github.com/emacs-bigtop/sysinfo-environs/#use-2-encode-system-details]["encoding system details" section]].
+
 [fn:1] E.g, for looking if a document is at least formally PDF/UA-1 compliant, check:
   - =Part=: Should be =1= (indicating PDF/UA-1).
   - =PDFUAVersion=: Often shows the specific version of the standard.
