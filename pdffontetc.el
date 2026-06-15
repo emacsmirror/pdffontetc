@@ -67,125 +67,13 @@
 ;;; Code:
 
 ;;;; Requires
-
 ;; (require 'pdf-view)
 ;; (require 'pdf-util)
 (require 'pdf-tools)
 (eval-when-compile
   (require 'org))
 
-;;;; misc helper functions
-(defun pdffontetc--merge-cons-to-string (lst)
-  "Merge a list \='LST\=' into a white-space separated string."
-  ;; start with first item to avoid leading space
-  (let ((unified-field-string (car lst))
-        (remain (cdr lst)))
-    ;; then process remainder, adding a " " between
-    (dolist (w remain)
-      (setq unified-field-string
-            (concat
-             unified-field-string
-             " "
-             w)))
-    unified-field-string))
-
-(defun pdffontetc--flatten-tree (tree)
-  "Return a \"flattened\" copy of TREE.
-In other words, return a list of the non-nil terminal nodes, or
-leaves, of the tree of cons cells rooted at TREE.  Leaves in the
-returned list are in the same order as in TREE.
-
-\(flatten-tree \\='(1 (2 . 3) nil (4 5 (6)) 7))
-=> (1 2 3 4 5 6 7).
-[Taken from subr.el to avoid requiring Emacs 27.1]"
-  (declare (side-effect-free error-free))
-  (let (elems)
-    (while (consp tree)
-      (let ((elem (pop tree)))
-        (while (consp elem)
-          (push (cdr elem) tree)
-          (setq elem (car elem)))
-        (if elem (push elem elems))))
-    (if tree (push tree elems))
-    (nreverse elems)))
-
-;;;; pdf metadata function
-
-;;;###autoload
-(defun pdffontetc-display-metadata-org-style (doc &optional combined)
-  "Display PDF metadata in a separate buffer in Org-mode style.
-Argument \='DOC\=' defaults to current buffer if it contains a PDF file;
-otherwise queries for a PDF file.  The optional argument \='COMBINED\=' is
-used when combined with `pdffontetc-display-font-information'."
-  (interactive
-   (if (pdf-tools-pdf-buffer-p)
-       (list (buffer-file-name))
-     (list (read-file-name "Choose PDF file:"))))
-  (let ((raw-pim (pdf-info-metadata doc))
-        (temp-buff-name (if combined
-                            "*PDF metadata and font info*"
-                            "*PDF metadata*")))
-    (get-buffer-create temp-buff-name)
-    (with-current-buffer temp-buff-name
-      (read-only-mode -1)
-      (erase-buffer)
-      (insert (format "* PDF metadata for file \"=%s=\":\n"
-                      (file-name-nondirectory doc)))
-      (dolist (item raw-pim)
-        (let ((fname (car item))
-              (fval (cdr item)))
-          ;; keyword field needs special handling
-          (if (and (listp fval)
-                   (> (length fval) 1)
-                   (equal fname 'keywords))
-              (let ((kword1 (cadr fval))
-                    (kwords (cddr fval)))
-                (insert (format "- =%s=: " fname))
-                (insert (format "~%s~"
-                                (string-trim kword1)))
-                (dolist (kword kwords)
-                  (insert
-                   (format ", ~%s~"
-                           (string-trim kword))))
-                (insert "\n"))
-            (insert (format "- =%s=: " fname))
-            (if (or (null fval) ;; don't format empty values or strings
-                    (and (and (stringp fval) (string-empty-p fval))))
-                (insert "\n")
-              ;; if not empty, then check
-              ;; make sure the object is a string
-              (if (stringp fval)
-                  ;; if so, then format it:
-                  (insert (format "~%s~\n"
-                                  (string-trim fval)))
-                ;; otherwise, if it's a list instead,
-                ;; try car'ing through the apparent list,
-                ;;  until we've reached a non list item
-                (while (listp fval)
-                  (setq fval (car fval)))
-
-                ;; TODO: check for edge cases here? (for symbols?)
-                (if (not (stringp fval))  ;; if this isn't a string,
-                    (insert "\n")        ;; leave the value blank
-                  ;; but if it indeed is a non-empty string
-                  (if (not (string-empty-p fval))
-                      ;; then format it
-                      (insert (format "~%s~\n"
-                                      (string-trim fval)))
-                    ;; otherwise, if it's an empty string at the end of all this
-                    (insert "\n")  ;; leave value blank
-                    )))))))
-      (when (and ; compiler pacifier
-             (fboundp 'org-fold-show-all)
-             (fboundp 'org-mode))
-        (org-mode)
-        (org-fold-show-all))
-      (read-only-mode 1)
-      (when (null combined)
-        (switch-to-buffer-other-window temp-buff-name))
-      (goto-char (point-min)))))
-
-;;;; PDF Font information
+;;;; Variables & Configurations
 
 (defvar pdffontetc-pdffonts-man-help
   "** Key to the above font information:
@@ -215,138 +103,255 @@ used when combined with `pdffontetc-display-font-information'."
 Information about the PDF font information displayed by
 `pdffontetc-display-font-information'.")
 
+;;;; Utility Helpers
+
+(defun pdffontetc--flatten-tree (tree)
+  "Return a \"flattened\" copy of TREE.
+In other words, return a list of the non-nil terminal nodes, or
+leaves, of the tree of cons cells rooted at TREE.  Leaves in the
+returned list are in the same order as in TREE.
+
+\(flatten-tree \\='(1 (2 . 3) nil (4 5 (6)) 7))
+=> (1 2 3 4 5 6 7).
+[Taken from subr.el to avoid requiring Emacs 27.1]"
+  (declare (side-effect-free error-free))
+  (let (elems)
+    (while (consp tree)
+      (let ((elem (pop tree)))
+        (while (consp elem)
+          (push (cdr elem) tree)
+          (setq elem (car elem)))
+        (if elem (push elem elems))))
+    (if tree (push tree elems))
+    (nreverse elems)))
+
+(defun pdffontetc--merge-cons-to-string (lst)
+  "Merge a list \='LST\=' into a white-space separated string."
+  (if (null lst) "" (mapconcat #'identity lst " ")))
+
+(defun pdffontetc--resolve-pdf-buffer (doc)
+  "Helper to safely resolve DOC path or fallback gracefully."
+  (or doc 
+      (if (pdf-tools-pdf-buffer-p)
+          (buffer-file-name)
+        (read-file-name "Choose PDF file:"))))
+
+;;;; Core Render Engine
+
+(defun pdffontetc--render-org-buffer (buffer-name sections &optional combined)
+  "Generic engine to display SECTIONS in an Org-mode temp buffer.
+SECTIONS is a list of plists containing:
+  (:title String :type (list | table | raw) :content Data :headers ListOfStrings)"
+  (let ((buf (get-buffer-create buffer-name)))
+    (with-current-buffer buf
+      (read-only-mode -1)
+      (unless combined (erase-buffer))
+      (when (and combined (> (buffer-size) 0))
+        (goto-char (point-max))
+        (insert "\n\n"))
+
+      (when (fboundp 'org-mode) (org-mode)) ;; turn on org-mode now
+       
+      (dolist (section sections)
+        (when section
+          (let ((title (plist-get section :title))
+                (type (plist-get section :type))
+                (content (plist-get section :content))
+                (headers (plist-get section :headers)))
+            
+            (when title (insert "* " title "\n"))
+            
+            (cond
+             ;; Rendering Org Lists with Markup
+             ((eq type 'list)
+              (dolist (item content)
+                (let ((key (car item)) (val (cdr item)))
+                  (insert (format "- =%s=: " key))
+                  (cond
+                   ((null val) (insert "\n"))
+                   ((and (listp val) (eq key 'keywords))
+                    (insert (mapconcat
+                             (lambda (k) (format "~%s~" (string-trim k))) val ", ")
+                            "\n"))
+                   (t (let ((v (if (listp val)
+                                   (car val)
+                                 val)))
+                        (if (and (stringp v) (not (string-empty-p v)))
+                            (insert (format "~%s~\n" (string-trim v)))
+                          (insert "\n"))))))))
+             
+             ;; Rendering Org Tables
+             ((eq type 'table)
+              (when headers
+                (insert "|" (mapconcat #'identity headers "|") "|\n")
+                (insert "|-\n"))
+              (dolist (row content)
+                (insert "|" (mapconcat (lambda (x) (format "%s" (or x ""))) row "|") "|\n"))
+              (when (fboundp 'org-table-align)
+                (org-table-align) ;; double-tap to get to align properly
+                (org-table-align)))
+             
+             ;; Rendering Raw Explanations/Markdown blocks
+             ((eq type 'raw)
+              (insert content)))
+            (insert "\n"))))
+      
+      ;; Make sure everything's unfolded
+      ;; (when (fboundp 'org-mode)
+      ;;   (org-mode)
+      ;;   (org-mode))
+      (when (fboundp 'org-fold-show-all)
+        (org-fold-show-all)
+        (org-fold-show-all))
+      (read-only-mode 1)
+      (unless combined
+        (switch-to-buffer-other-window buf))
+      (goto-char (point-min)))))
+
+;;;; Backend Data Parsers for PDF Font information
+
+(defun pdffontetc--extract-metadata (doc)
+  "Extract standard PDF-Tools meta-pairs from \='DOC\='."
+  (mapcar (lambda (item) (cons (car item) (cdr item))) 
+          (pdf-info-metadata doc)))
+
 (defun pdffontetc--extract-pdffonts-info (doc)
   "Non-interactive function to parse the output of `pdffonts'.
 Extracts information from calling `pdffonts' utility on PDF document
 \='DOC\='.  Called by `pdffontetc-display-font-information'."
   (unless (executable-find "pdffonts")
-    (error "System package `pdffonts' must be installed"))
-  (let* ((raw
-          (remove ""
-                 (split-string
-                  (shell-command-to-string
-                   (concat "pdffonts \"" doc "\""))
-                  "\n")))
-         (body (cddr raw))
-         (pdffont-values nil))
+    (error "System package `pdffonts` must be installed"))
+  (let* ((cmd (format "pdffonts %s" (shell-quote-argument doc)))
+         (raw (remove "" (split-string (shell-command-to-string cmd) "\n")))
+         ;; skip header line & dashed separator line safely
+         (body (if (> (length raw) 2) (cddr raw) nil))
+         (results nil))
     (dolist (line body)
-      (let ((raw-font-info (nreverse
-                            (split-string line))))
-        (let* ((object-id (concat
-                           (nth 1 raw-font-info)
-                           "."
-                           (nth 0 raw-font-info)))
-               (uni (nth 2 raw-font-info))
-               (sub (nth 3 raw-font-info))
-               (emb (nth 4 raw-font-info))
-               (encoding (nth 5 raw-font-info))
-               (remainder (cdddr (cdddr raw-font-info)))
-               (flipback (nreverse remainder))
-               (font-name (car flipback))
-               (type
-                (pdffontetc--merge-cons-to-string
-                 (pdffontetc--flatten-tree
-                       (cdr flipback)))))
-          (setq pdffont-values
-                (cons
-                 (list
-                  font-name
-                  type
-                  encoding
-                  emb
-                  sub
-                  uni
-                  object-id)
-                 pdffont-values)))))
-    pdffont-values))
+      (let ((tokens (split-string line " " t)))
+        ;; ensure we have enough columns to represent standard pdffonts lines
+        (when (>= (length tokens) 6)
+          (let* ((len (length tokens))
+                 ;; object-ID components are always the last two columns
+                 (gen-id (nth (- len 1) tokens))
+                 (num-id (nth (- len 2) tokens))
+                 (object-id (concat num-id "." gen-id))
+                 ;; Read columns backwards from object ID position
+                 (uni (nth (- len 3) tokens))
+                 (sub (nth (- len 4) tokens))
+                 (emb (nth (- len 5) tokens))
+                 (encoding (nth (- len 6) tokens))
+                 ;; everything before encoding belongs to font-name and font-type
+                 (remaining-prefix (butlast tokens 6))
+                 ;; the first element is always the main font name identifier
+                 (font-name (or (car remaining-prefix) "[No Name]"))
+                 ;; anything left between name and encoding is the font type
+                 (type-list (cdr remaining-prefix))
+                 (type (if type-list (mapconcat #'identity type-list " ") "[No Type]")))
+            (push (list font-name type encoding emb sub uni object-id) results)))))
+    (nreverse results)))
+
+
+(defun pdffontetc--extract-exiftool-accessibility (doc)
+  "Extract specific accessibility and validation features from \='DOC\=' using ExifTool.
+Silences underlying environment localization shell errors safely."
+  (if (not (executable-find "exiftool"))
+      '(("Error" . "exiftool is not installed on this system"))
+    (let* (;; Call exiftool without filtering tags to capture everything
+           (cmd (format "exiftool %s 2>/dev/null" (shell-quote-argument doc)))
+           (raw-lines (split-string (shell-command-to-string cmd) "\n" t))
+           (results nil))
+      (dolist (line raw-lines)
+        (when (string-match ":" line)
+          (let* ((pos (string-match ":" line))
+                 (key (string-trim (substring line 0 pos)))
+                 (val (string-trim (substring line (1+ pos)))))
+            ;; Only include the tag if it has an actual value assigned to it
+            (unless (string-empty-p val)
+              (push (cons key val) results)))))
+      (nreverse results))))
+
+
+;;;; Interactive User Operations
 
 ;;;###autoload
-(defun pdffontetc-display-font-information (doc &optional combined)
+;; was "  "Display standard PDF Metadata + Exif Validation Tags.""
+(defun pdffontetc-display-metadata-org-style (&optional doc combined)
+  "Display PDF metadata in a separate buffer in Org-mode style.
+Argument \='DOC\=' defaults to current buffer if it contains a PDF file;
+otherwise queries for a PDF file.  The optional argument \='COMBINED\=' is
+used when combined with `pdffontetc-display-font-information'."
+  (interactive (list (pdffontetc--resolve-pdf-buffer nil) nil))
+  (let* ((target-doc (pdffontetc--resolve-pdf-buffer doc))
+         (buf-name (if combined "*PDF metadata and font info*" "*PDF metadata*"))
+         (sections
+          (list
+           (list :title (format "PDF metadata for file \"=%s=\":" (file-name-nondirectory target-doc))
+                 :type 'list
+                 :content (pdffontetc--extract-metadata target-doc))
+           (list :title "Accessibility & Archivable Conformity Status (ExifTool):"
+                 :type 'list
+                 :content (pdffontetc--extract-exiftool-accessibility target-doc))
+           )))
+    (pdffontetc--render-org-buffer buf-name sections combined)))
+
+;;;###autoload
+(defun pdffontetc-display-font-information (&optional doc combined prefix-arg)
   "Parse the output of `pdffonts' for PDF file \='DOC\='.
 Information is display in an Org-mode table in a temporary buffer.
 Includes explanatory information if called with prefix argument.
 \(I.e., if command is preceded by `C-u'.\) Optional \='COMBINED\='
 argument alters behaviour for use with
 `pdffontetc-display-combined-metadata-and-font-info'."
-  (interactive
-   (if (pdf-tools-pdf-buffer-p)
-       (list (buffer-file-name))
-     (list (read-file-name "Choose PDF file:"))))
-  (unless (executable-find "pdffonts")
-    (error "System package `pdffonts' must be installed"))
-  (let ((pdffont-values (pdffontetc--extract-pdffonts-info doc))
-        (temp-buff-name (if combined
-                            "*PDF metadata and font info*"
-                          "*PDF fonts*")))
-    (when (null combined)
-      (get-buffer-create temp-buff-name))
-    (with-current-buffer temp-buff-name
-      (read-only-mode -1)
-      (if combined
-          (progn
-            (goto-char (point-max))
-            (insert "\n"))
-        (erase-buffer))
-      (insert (format "* PDF font information for file \"=%s=\":\n"
-                      (file-name-nondirectory doc)))
-      (insert "|-\n")
-      (let ((header '("=name=" "=type=" "=encoding=" "=emb=" "=sub=" "=uni=" "=object ID=")))
-          (dolist (field header)
-            (insert " | ")
-            (insert field)))
-      (insert "|\n")
-      (insert "|--")
-      (insert "\n")
-      (goto-char (point-max))
-      (dolist (item pdffont-values)
-        (let ((ffield t))
-          (dolist (field item)
-            (insert " | ")
-            (if ffield
-                (progn
-                  (insert (format "~%s~" field))
-                  (setq ffield nil))
-              (insert (format "%s" field)))))
-        (insert "\n"))
-      (insert "|-")
-      (when (and ; compiler pacifier
-             (fboundp 'org-mode)
-             (fboundp 'org-table-align)
-             (fboundp 'org-fold-show-all))
-        (org-mode)
-        (org-mode) ; double-tap for some reason
-        (org-fold-show-all)
-        (org-fold-show-all)
-        (org-table-align)
-        (org-table-align)) ; needs to be twice to get formatting right
-      (goto-char (point-max))
-      (when current-prefix-arg
-        (insert "\n")
-        (insert pdffontetc-pdffonts-man-help))
-      (read-only-mode 1)
-      (switch-to-buffer-other-window temp-buff-name)
-      ;; visual-fill-column-mode will be too narrow
-      ;; disable if on:
-      (when (and
-             (fboundp 'visual-fill-column-mode)
-             (bound-and-true-p visual-fill-column-mode))
-        (visual-fill-column-mode -1))
-      (goto-char (point-min)))))
+  (interactive (list (pdffontetc--resolve-pdf-buffer nil) nil current-prefix-arg))
+  (let* ((target-doc (pdffontetc--resolve-pdf-buffer doc))
+         (buf-name (if combined "*PDF metadata and font info*" "*PDF fonts*"))
+         (sections
+          (list
+           (list :title (format "PDF font information for file \"=%s=\":"
+                                (file-name-nondirectory target-doc))
+                 :type 'table
+                 :headers '("=name=" "=type=" "=encoding=" "=emb=" "=sub=" "=uni=" "=object ID=")
+                 :content (pdffontetc--extract-pdffonts-info target-doc)))))
+    (when prefix-arg
+      (setq sections
+            (append sections (list
+                              (list
+                               :type 'raw :content pdffontetc-pdffonts-man-help)))))
+    (pdffontetc--render-org-buffer buf-name sections combined)))
 
-;;;; Combined PDF metadata and font information display
 
 ;;;###autoload
-(defun pdffontetc-display-combined-metadata-and-font-info (doc)
+(defun pdffontetc-display-combined-metadata-and-font-info (&optional doc prefix-arg)
   "Show combined PDF metadata and font information.
 Operates on PDF document \='DOC\=', either current buffer, or passed
 manually, or user is queried to supply one.  \(Prefixed argument
 triggers showing explanatory information for font metadata.\)"
-  (interactive
-   (if (pdf-tools-pdf-buffer-p)
-       (list (buffer-file-name))
-     (list (read-file-name "Choose PDF file:"))))
-  (pdffontetc-display-metadata-org-style doc t)
-  (pdffontetc-display-font-information doc t))
+  (interactive (list (pdffontetc--resolve-pdf-buffer nil) current-prefix-arg))
+  (let* ((target-doc (pdffontetc--resolve-pdf-buffer doc))
+         (buf-name "*PDF metadata and font info*")
+         (master-sections
+          (list
+           (list :title (format "PDF metadata for file \"=%s=\":" (file-name-nondirectory target-doc))
+                 :type 'list
+                 :content (pdffontetc--extract-metadata target-doc))
+           
+           (list :title "Accessibility & Archivable Conformity Status (ExifTool):"
+                 :type 'list
+                 :content (pdffontetc--extract-exiftool-accessibility target-doc))
+           
+           (list :title "PDF Font Information:"
+                 :type 'table
+                 :headers '("=name=" "=type=" "=encoding=" "=emb=" "=sub=" "=uni=" "=object ID=")
+                 :content (pdffontetc--extract-pdffonts-info target-doc)))))
+    
+    (when prefix-arg
+      (setq master-sections 
+            (append master-sections 
+                    (list (list :type 'raw :content pdffontetc-pdffonts-man-help)))))
+    
+    ;; Render everything completely using a fresh canvas generation pass
+    (pdffontetc--render-org-buffer buf-name master-sections nil)))
+
 
 (provide 'pdffontetc)
 
