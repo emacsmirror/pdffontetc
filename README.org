@@ -45,10 +45,12 @@ You may want to shadow PDF Tools' ~pdf-misc-minor-mode~ map in your init, or oth
 *** From MELPA
 [[https://melpa.org/#/pdffontetc][file:https://melpa.org/packages/pdffontetc-badge.svg]]
 
-You can install this package from Melpa, including via `use-package`, e.g.:
+You can install this package from [[https://melpa.org/#/][Melpa]], including via `use-package`, e.g.:
 
+#+begin_src elisp
 (use-package pdffontetc
   ;; :ensure t ; maybe, depending on your use-package setup)
+#+end_src
 
 *** Manual
 Clone this repo or copy the ~pdffontetc.el~ file somewhere and load it via =init.el=, e.g., copy to =~/.emacs.d/lisp/pdffontetc/= and put in your =init.el=:
@@ -62,7 +64,7 @@ Clone this repo or copy the ~pdffontetc.el~ file somewhere and load it via =init
 The easiest if you're using Emacs 30 or above is the [[https://git.savannah.gnu.org/cgit/emacs.git/commit/?id=2ce279680bf9c1964e98e2aa48a03d6675c386fe][built-in]] ~vc-use-package~. 
 
 **** vc-use-package [built-in]
-Included in Emacs 30+. Probably the easiest method:
+Included in Emacs 30+. Probably the easiest alternative method:
 #+begin_src elisp
 (use-package pdffontetc
   :vc (pdffontetc :url "https://github.com/emacsomancer/pdffontetc"
@@ -92,6 +94,7 @@ With [[https://github.com/radian-software/straight.el][straight]]:
   :straight (pdffontetc :type git :host github :repo "emacsomancer/pdffontetc")
   :ensure t)
 #+end_src
+
 **** quelpa
 With [[https://github.com/quelpa/quelpa][quelpa]]:
 #+begin_src elisp
