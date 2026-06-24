@@ -1,4 +1,5 @@
 #+options: f:t # for github footnotes to work
+[[https://melpa.org/#/pdffontetc][file:https://melpa.org/packages/pdffontetc-badge.svg]]
 * PDF Fonts Etc.
 Designed to show information about a Portable Document Format (PDF) document fonts and other metadata information.
 
@@ -42,7 +43,11 @@ You may want to shadow PDF Tools' ~pdf-misc-minor-mode~ map in your init, or oth
 ** Installation
 
 *** From MELPA
-[pending]
+[[https://melpa.org/#/pdffontetc][file:https://melpa.org/packages/pdffontetc-badge.svg]]
+You can install this package from Melpa, including via `use-package`, e.g.:
+
+(use-package pdffontetc
+  ;; :ensure t ; maybe, depending on your use-package setup)
 
 *** Manual
 Clone this repo or copy the ~pdffontetc.el~ file somewhere and load it via =init.el=, e.g., copy to =~/.emacs.d/lisp/pdffontetc/= and put in your =init.el=:
