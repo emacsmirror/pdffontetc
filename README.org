@@ -44,6 +44,7 @@ You may want to shadow PDF Tools' ~pdf-misc-minor-mode~ map in your init, or oth
 
 *** From MELPA
 [[https://melpa.org/#/pdffontetc][file:https://melpa.org/packages/pdffontetc-badge.svg]]
+
 You can install this package from Melpa, including via `use-package`, e.g.:
 
 (use-package pdffontetc
