@@ -33,7 +33,11 @@
 ;; Boston, MA 02110-1301, USA.
 
 ;;; Commentary:
-;; miscellaneous commands for PDF and PDF font metadata; supplement to PDF-Tools
+;; miscellaneous commands for PDF and PDF font metadata; possible supplement to PDF-Tools
+;; external requirements:
+;;                        - `pdffonts' (font information)  <https://github.com/elswork/poppler-utils>
+;; optional external requirements: 
+;;                        - `exiftool' (for advanced pdf meta data) <https://exiftool.org/>
 
 ;;; Installation:
 ;; To install manually, clone the git repo somewhere and put it in your
